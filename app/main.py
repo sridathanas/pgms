@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from app import models, database, crud
-from app.routers import admin  # Must import the admin router module
+from app.routers import admin, operator  # Must import the admin router module
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -14,6 +14,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 # Register the admin router
 app.include_router(admin.router)
+app.include_router(operator.router)
 
 @app.get("/")
 def read_root(request: Request):

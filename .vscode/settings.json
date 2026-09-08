@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "D:\\PGMS\\pgms-1\\venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "D:\\PGMS\\pgms-1\\venv\\Lib\\site-packages"
+    ]
+}
