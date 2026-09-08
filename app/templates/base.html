@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', path='/style.css') }}" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-gray-900">
+    <nav class="bg-blue-900 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">Smart Power Grid (PGMS)</h1>
+            <div class="space-x-4">
+                <a href="/" class="hover:text-blue-300">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-6 mt-4 bg-white rounded shadow-sm">
+        {% block content %}
+        <h2 class="text-2xl font-semibold mb-4">Welcome to the PGMS Dashboard</h2>
+        <p>Select a portal to continue.</p>
+        {% endblock %}
+    </main>
+</body>
+</html>
