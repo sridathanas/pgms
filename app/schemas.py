@@ -1,16 +1,23 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
 # User Accounts
 class UserAccountBase(BaseModel):
     username: str
-    role: str
+    role: Literal["ADMIN", "OPERATOR", "TECHNICIAN"]
     isActive: bool = True
+    approvalStatus: Literal["APPROVED", "PENDING", "REJECTED"] = "APPROVED"
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    skillLevel: Optional[str] = None
+    availabilityStatus: Optional[str] = None
+    currentLocation: Optional[str] = None
 
 class UserAccountCreate(UserAccountBase):
-    passwordHash: str
+    password: str  # plain text in, hashed by crud.create_user before storage
 
 class UserAccount(UserAccountBase):
     userID: int

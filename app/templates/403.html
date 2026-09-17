@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="py-12 text-center">
+    <p class="text-sm font-semibold uppercase tracking-wide text-red-700">403 &middot; Access denied</p>
+    <h2 class="mt-2 text-2xl font-bold text-gray-900">You don't have permission to open this page.</h2>
+    <p class="mt-2 text-gray-600">This part of the system isn't available to your account's role.</p>
+    <a href="{{ dashboard_url }}" class="mt-6 inline-block rounded-md bg-blue-900 px-4 py-2 font-medium text-white hover:bg-blue-800">Go to my dashboard</a>
+</div>
+{% endblock %}

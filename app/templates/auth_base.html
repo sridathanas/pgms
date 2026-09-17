@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block body_class %}min-h-screen bg-slate-100 font-sans text-slate-900 antialiased{% endblock %}
+{% block body %}
+<div class="min-h-screen lg:grid lg:grid-cols-2">
+
+    <!-- Brand panel: compact header on phones, full panel on large screens -->
+    <section class="relative flex flex-col overflow-hidden bg-blue-950 px-6 py-6 text-white sm:px-10 lg:px-14 lg:py-12">
+        <div class="grid-pattern absolute inset-0" aria-hidden="true"></div>
+        <div class="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-amber-400/10 blur-3xl" aria-hidden="true"></div>
+
+        <div class="relative flex items-center gap-3">
+            <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-400 text-blue-950">
+                <svg class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.5L13.5 2Z"/>
+                </svg>
+            </span>
+            <div>
+                <p class="text-lg font-bold leading-tight">PGMS</p>
+                <p class="text-xs text-blue-200">Smart Power Grid Management System</p>
+            </div>
+        </div>
+
+        <div class="relative hidden lg:my-auto lg:block">
+            <h1 class="max-w-md text-4xl font-bold leading-tight">AI-enabled operations for the power grid.</h1>
+            <p class="mt-4 max-w-md text-blue-200">
+                Manage stations and substations, predict outages before they happen,
+                catch power theft, and dispatch maintenance crews from one place.
+            </p>
+            <ul class="mt-8 grid max-w-md grid-cols-2 gap-3 text-sm">
+                <li class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                    <span class="h-2 w-2 rounded-full bg-emerald-400"></span>Infrastructure
+                </li>
+                <li class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                    <span class="h-2 w-2 rounded-full bg-amber-400"></span>Outage prediction
+                </li>
+                <li class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                    <span class="h-2 w-2 rounded-full bg-red-400"></span>Theft detection
+                </li>
+                <li class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                    <span class="h-2 w-2 rounded-full bg-sky-400"></span>Maintenance dispatch
+                </li>
+            </ul>
+        </div>
+
+        <p class="relative hidden text-xs text-blue-300 lg:block">IIIT Kottayam &middot; Group PGMS</p>
+    </section>
+
+    <main class="flex items-center justify-center px-4 py-10 sm:px-6 lg:px-12">
+        <div class="w-full max-w-sm">
+            <!-- Sign in / Sign up switch -->
+            <nav class="grid grid-cols-2 rounded-lg bg-slate-200/80 p-1 text-sm font-medium" aria-label="Account">
+                <a href="/login" {% if active_tab == 'login' %}aria-current="page"{% endif %}
+                    class="rounded-md px-3 py-2 text-center {% if active_tab == 'login' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+                    Sign in
+                </a>
+                <a href="/signup" {% if active_tab == 'signup' %}aria-current="page"{% endif %}
+                    class="rounded-md px-3 py-2 text-center {% if active_tab == 'signup' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-600 hover:text-slate-900{% endif %}">
+                    Sign up
+                </a>
+            </nav>
+
+            {% block auth_form %}{% endblock %}
+        </div>
+    </main>
+</div>
+
+<script>
+    (function () {
+        document.querySelectorAll("[data-password-toggle]").forEach(function (toggle) {
+            var input = document.getElementById(toggle.getAttribute("aria-controls"));
+            toggle.addEventListener("click", function () {
+                var show = input.type === "password";
+                input.type = show ? "text" : "password";
+                toggle.textContent = show ? "Hide" : "Show";
+                toggle.setAttribute("aria-pressed", String(show));
+            });
+        });
+
+        // Stop double submits; re-enable if the page is restored with the back button
+        var form = document.querySelector("form[data-auth-form]");
+        if (!form) return;
+        var submit = form.querySelector("button[type=submit]");
+        var idleLabel = submit.textContent.trim();
+        form.addEventListener("submit", function () {
+            submit.disabled = true;
+            submit.textContent = submit.getAttribute("data-busy-label") || idleLabel;
+        });
+        window.addEventListener("pageshow", function () {
+            submit.disabled = false;
+            submit.textContent = idleLabel;
+        });
+    })();
+</script>
+{% endblock %}

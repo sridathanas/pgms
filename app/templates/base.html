@@ -7,12 +7,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="{{ url_for('static', path='/style.css') }}" rel="stylesheet">
 </head>
-<body class="bg-gray-100 min-h-screen font-sans text-gray-900">
+<body class="{% block body_class %}bg-gray-100 min-h-screen font-sans text-gray-900{% endblock %}">
+    {% block body %}
+    {% set current_user = request.state.user %}
     <nav class="bg-blue-900 text-white p-4 shadow-md">
-        <div class="container mx-auto flex justify-between items-center">
+        <div class="container mx-auto flex flex-wrap justify-between items-center gap-3">
             <h1 class="text-xl font-bold">Smart Power Grid (PGMS)</h1>
-            <div class="space-x-4">
+            <div class="flex items-center gap-4">
                 <a href="/" class="hover:text-blue-300">Home</a>
+                {% if current_user %}
+                <span class="text-sm text-blue-100">
+                    {{ current_user.name or current_user.username }}
+                    <span class="text-blue-300">({{ current_user.role|title }})</span>
+                </span>
+                <form action="/logout" method="POST">
+                    <button type="submit" class="rounded-md border border-blue-300/50 px-3 py-1 text-sm hover:bg-blue-800">Log out</button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </nav>
@@ -23,5 +34,6 @@
         <p>Select a portal to continue.</p>
         {% endblock %}
     </main>
+    {% endblock %}
 </body>
 </html>

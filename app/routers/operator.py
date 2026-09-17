@@ -2,9 +2,13 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from app import database, crud, schemas, models
+from app import auth, database, crud, schemas, models
 
-router = APIRouter(prefix="/operator", tags=["Operator"])
+router = APIRouter(
+    prefix="/operator",
+    tags=["Operator"],
+    dependencies=[Depends(auth.require_roles(models.Role.OPERATOR))],
+)
 templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/")
@@ -12,7 +16,7 @@ def operator_dashboard(request: Request, db: Session = Depends(database.get_db))
     substations = crud.get_substations(db)
     consumers = crud.get_consumers(db)
     alerts = db.query(models.Alert).all()
-    technicians = db.query(models.UserAccount).filter(models.UserAccount.role == "TECHNICIAN").all()
+    technicians = db.query(models.UserAccount).filter(models.UserAccount.role == models.Role.TECHNICIAN).all()
     tickets = db.query(models.MaintenanceTicket).all()
    
     return templates.TemplateResponse(

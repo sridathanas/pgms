@@ -6,6 +6,49 @@
         <p class="text-gray-600">Execute infrastructure setup operations like addInfrastructure() to provision power stations and substations[cite: 1].</p>
     </div>
 
+    {% if flash %}
+    <div role="status" class="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{{ flash }}</div>
+    {% endif %}
+
+    {% if pending_admins %}
+    <div class="bg-amber-50 p-6 rounded-lg border border-amber-200 shadow-sm">
+        <h3 class="text-lg font-semibold text-gray-800">
+            Pending Administrator Requests
+            <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-200 text-amber-900">{{ pending_admins|length }}</span>
+        </h3>
+        <p class="mt-1 mb-4 text-sm text-gray-600">These people signed up as administrators. Approve only people who should have full access to the system.</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-amber-200">
+                <thead>
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-amber-100">
+                    {% for u in pending_admins %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ u.name or "—" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ u.username }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ u.createdAt.strftime('%d %b %Y, %H:%M') ~ ' UTC' if u.createdAt else "—" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <form action="/admin/users/{{ u.userID }}/approve" method="POST" class="inline">
+                                <button type="submit" class="text-green-700 hover:text-green-900 bg-green-100 px-2 py-1 rounded">Approve</button>
+                            </form>
+                            <form action="/admin/users/{{ u.userID }}/reject" method="POST" class="inline">
+                                <button type="submit" class="text-red-700 hover:text-red-900 bg-red-100 px-2 py-1 rounded">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-sm">
             <h3 class="text-lg font-semibold mb-4 text-gray-800">Add Power Station</h3>

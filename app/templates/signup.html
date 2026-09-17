@@ -1,0 +1,101 @@
+{% extends "auth_base.html" %}
+
+{% macro input_style(error) -%}
+block w-full rounded-lg border bg-white py-2.5 shadow-sm focus:outline-none focus:ring-2
+{%- if error %} border-red-400 focus:border-red-500 focus:ring-red-500/20{% else %} border-slate-300 focus:border-blue-700 focus:ring-blue-700/20{% endif %}
+{%- endmacro %}
+
+{% macro field_error(name) -%}
+{% if errors[name] %}<p id="{{ name }}-error" class="mt-1.5 text-xs text-red-600">{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+
+{% block auth_form %}
+<h2 class="mt-8 text-2xl font-bold tracking-tight">Create an account</h2>
+<p class="mt-1 text-sm text-slate-500">Choose your role, then pick a username and password.</p>
+
+{% if errors %}
+<div role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    Please fix the highlighted fields.
+</div>
+{% endif %}
+
+<form data-auth-form action="/signup" method="POST" class="mt-6 space-y-5">
+    <fieldset {% if errors.role %}aria-describedby="role-error"{% endif %}>
+        <legend class="text-sm font-medium text-slate-700">I am a&hellip;</legend>
+        <div class="mt-2 space-y-2">
+            {% for r in roles %}
+            <label class="flex cursor-pointer items-start gap-3 rounded-lg border bg-white px-3 py-2.5 shadow-sm hover:border-blue-400 has-[:checked]:border-blue-700 has-[:checked]:bg-blue-50/60 has-[:checked]:ring-1 has-[:checked]:ring-blue-700 {% if errors.role %}border-red-400{% else %}border-slate-300{% endif %}">
+                <input type="radio" name="role" value="{{ r.value }}" required {% if role == r.value %}checked{% endif %}
+                    class="mt-1 h-4 w-4 flex-none accent-blue-800">
+                <span>
+                    <span class="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-slate-900">
+                        {{ r.label }}
+                        {% if r.note %}<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{{ r.note }}</span>{% endif %}
+                    </span>
+                    <span class="block text-xs text-slate-500">{{ r.description }}</span>
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+        {{ field_error("role") }}
+    </fieldset>
+
+    <div>
+        <label for="name" class="block text-sm font-medium text-slate-700">Full name</label>
+        <input id="name" name="name" type="text" value="{{ name }}" required maxlength="100" autocomplete="name"
+            {% if errors.name %}aria-invalid="true" aria-describedby="name-error"{% endif %}
+            class="mt-1.5 px-3 {{ input_style(errors.name) }}">
+        {{ field_error("name") }}
+    </div>
+
+    <div>
+        <label for="username" class="block text-sm font-medium text-slate-700">Username</label>
+        <input id="username" name="username" type="text" value="{{ username }}" required minlength="3" maxlength="30"
+            autocomplete="username" autocapitalize="none" spellcheck="false"
+            aria-describedby="{% if errors.username %}username-error {% endif %}username-hint"
+            {% if errors.username %}aria-invalid="true"{% endif %}
+            class="mt-1.5 px-3 {{ input_style(errors.username) }}">
+        {{ field_error("username") }}
+        <p id="username-hint" class="mt-1.5 text-xs text-slate-500">3&ndash;30 characters: letters, numbers, dots, underscores or hyphens.</p>
+    </div>
+
+    <div>
+        <label for="password" class="block text-sm font-medium text-slate-700">Password</label>
+        <div class="relative mt-1.5">
+            <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password"
+                aria-describedby="{% if errors.password %}password-error {% endif %}password-hint"
+                {% if errors.password %}aria-invalid="true"{% endif %}
+                class="pl-3 pr-16 {{ input_style(errors.password) }}">
+            <button type="button" data-password-toggle aria-controls="password" aria-pressed="false"
+                class="absolute inset-y-0 right-0 px-3 text-sm font-medium text-blue-800 hover:text-blue-950 focus:outline-none focus-visible:underline">
+                Show
+            </button>
+        </div>
+        {{ field_error("password") }}
+        <p id="password-hint" class="mt-1.5 text-xs text-slate-500">At least 8 characters, with a letter and a number.</p>
+    </div>
+
+    <div>
+        <label for="confirm_password" class="block text-sm font-medium text-slate-700">Confirm password</label>
+        <div class="relative mt-1.5">
+            <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password"
+                {% if errors.confirm_password %}aria-invalid="true" aria-describedby="confirm_password-error"{% endif %}
+                class="pl-3 pr-16 {{ input_style(errors.confirm_password) }}">
+            <button type="button" data-password-toggle aria-controls="confirm_password" aria-pressed="false"
+                class="absolute inset-y-0 right-0 px-3 text-sm font-medium text-blue-800 hover:text-blue-950 focus:outline-none focus-visible:underline">
+                Show
+            </button>
+        </div>
+        {{ field_error("confirm_password") }}
+    </div>
+
+    <button type="submit" data-busy-label="Creating account&hellip;"
+        class="flex w-full items-center justify-center rounded-lg bg-blue-900 px-4 py-2.5 font-semibold text-white shadow-sm hover:bg-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-900 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70">
+        Create account
+    </button>
+</form>
+
+<p class="mt-8 text-center text-sm text-slate-500">
+    Already have an account? <a href="/login" class="font-medium text-blue-800 hover:text-blue-950 hover:underline">Sign in</a>
+</p>
+{% endblock %}

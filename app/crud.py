@@ -1,5 +1,48 @@
 from sqlalchemy.orm import Session
-from app import models, schemas  # Explicit app import
+from app import models, schemas, security  # Explicit app import
+
+# User Account Operations
+def get_user(db: Session, user_id: int):
+    return db.query(models.UserAccount).filter(models.UserAccount.userID == user_id).first()
+
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.UserAccount).filter(models.UserAccount.username == username).first()
+
+def create_user(db: Session, user: schemas.UserAccountCreate):
+    db_user = models.UserAccount(
+        **user.model_dump(exclude={"password"}),
+        passwordHash=security.hash_password(user.password),
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def has_approved_admin(db: Session) -> bool:
+    return db.query(models.UserAccount.userID).filter(
+        models.UserAccount.role == models.Role.ADMIN,
+        models.UserAccount.approvalStatus == models.ApprovalStatus.APPROVED,
+        models.UserAccount.isActive.is_(True),
+    ).first() is not None
+
+def get_pending_admins(db: Session):
+    return db.query(models.UserAccount).filter(
+        models.UserAccount.role == models.Role.ADMIN,
+        models.UserAccount.approvalStatus == models.ApprovalStatus.PENDING,
+    ).order_by(models.UserAccount.createdAt).all()
+
+def set_approval_status(db: Session, user: models.UserAccount, status: str):
+    user.approvalStatus = status
+    db.commit()
+    db.refresh(user)
+    return user
+
+# System Log Operations
+def log_action(db: Session, action_type: str, description: str, user_id: int | None = None):
+    db_log = models.SystemLog(userID=user_id, actionType=action_type, description=description)
+    db.add(db_log)
+    db.commit()
+    return db_log
 
 # Power Station Operations
 def get_power_stations(db: Session, skip: int = 0, limit: int = 100):

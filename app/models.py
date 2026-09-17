@@ -4,13 +4,47 @@ from app.database import Base  # Explicit app import
 from datetime import datetime
 
 
+class Role:
+    ADMIN = "ADMIN"
+    OPERATOR = "OPERATOR"
+    TECHNICIAN = "TECHNICIAN"
+
+
+class ApprovalStatus:
+    APPROVED = "APPROVED"
+    PENDING = "PENDING"    # administrator sign-up waiting for an existing admin
+    REJECTED = "REJECTED"
+
+
 class UserAccount(Base):
     __tablename__ = "user_accounts"
     userID = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    passwordHash = Column(String)
-    role = Column(String)  # admin, operator, technician; no "consumer"
+    username = Column(String, unique=True, index=True, nullable=False)
+    passwordHash = Column(String, nullable=False)  # bcrypt hash, never the plain password
+    role = Column(String, nullable=False)  # Role.ADMIN, Role.OPERATOR or Role.TECHNICIAN
     isActive = Column(Boolean, default=True)
+    approvalStatus = Column(String, nullable=False, default=ApprovalStatus.APPROVED)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    name = Column(String)
+    email = Column(String)
+    phone = Column(String)
+
+    # Technician-only fields, NULL for other roles
+    skillLevel = Column(String, nullable=True)
+    availabilityStatus = Column(String, nullable=True)  # AVAILABLE, BUSY
+    currentLocation = Column(String, nullable=True)
+
+    logs = relationship("SystemLog", back_populates="user")
+
+class SystemLog(Base):
+    __tablename__ = "system_logs"
+    logID = Column(Integer, primary_key=True, index=True)
+    userID = Column(Integer, ForeignKey("user_accounts.userID"), nullable=True)
+    actionType = Column(String, index=True)
+    timeStamp = Column(DateTime, default=datetime.utcnow)
+    description = Column(String)
+
+    user = relationship("UserAccount", back_populates="logs")
 
 class PowerStation(Base):
     __tablename__ = "power_stations"
