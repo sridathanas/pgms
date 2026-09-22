@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from app.database import Base  # Explicit app import
+from app.database import Base
 from datetime import datetime
 
 
@@ -9,29 +9,25 @@ class Role:
     OPERATOR = "OPERATOR"
     TECHNICIAN = "TECHNICIAN"
 
-
 class ApprovalStatus:
     APPROVED = "APPROVED"
-    PENDING = "PENDING"    # administrator sign-up waiting for an existing admin
+    PENDING = "PENDING"
     REJECTED = "REJECTED"
-
 
 class UserAccount(Base):
     __tablename__ = "user_accounts"
     userID = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
-    passwordHash = Column(String, nullable=False)  # bcrypt hash, never the plain password
-    role = Column(String, nullable=False)  # Role.ADMIN, Role.OPERATOR or Role.TECHNICIAN
+    passwordHash = Column(String, nullable=False)
+    role = Column(String, nullable=False)
     isActive = Column(Boolean, default=True)
     approvalStatus = Column(String, nullable=False, default=ApprovalStatus.APPROVED)
     createdAt = Column(DateTime, default=datetime.utcnow)
     name = Column(String)
     email = Column(String)
     phone = Column(String)
-
-    # Technician-only fields, NULL for other roles
     skillLevel = Column(String, nullable=True)
-    availabilityStatus = Column(String, nullable=True)  # AVAILABLE, BUSY
+    availabilityStatus = Column(String, nullable=True)
     currentLocation = Column(String, nullable=True)
 
     logs = relationship("SystemLog", back_populates="user")
@@ -68,6 +64,9 @@ class Substation(Base):
 
     power_station = relationship("PowerStation", back_populates="substations")
     consumers = relationship("Consumer", back_populates="substation")
+    sensor_logs = relationship("SubstationSensorLog", back_populates="substation")
+    weather_logs = relationship("WeatherData", back_populates="substation")
+    outage_predictions = relationship("OutagePrediction", back_populates="substation")
 
 class Consumer(Base):
     __tablename__ = "consumers"
@@ -112,3 +111,33 @@ class MaintenanceTicket(Base):
     resolutionNotes = Column(String, nullable=True)
 
     alert = relationship("Alert", back_populates="maintenance_tickets")
+
+class SubstationSensorLog(Base):
+    __tablename__ = "substation_sensor_logs"
+    sensorLogID = Column(Integer, primary_key=True, index=True)
+    subStationID = Column(Integer, ForeignKey("substations.subStationID"), nullable=False)
+    timeStamp = Column(DateTime, default=datetime.utcnow)
+    currentLoadMW = Column(Float, nullable=False)
+    
+    substation = relationship("Substation", back_populates="sensor_logs")
+
+class WeatherData(Base):
+    __tablename__ = "weather_data"
+    weatherID = Column(Integer, primary_key=True, index=True)
+    subStationID = Column(Integer, ForeignKey("substations.subStationID"), nullable=False)
+    temperature = Column(Float, nullable=False)
+    windSpeed = Column(Float, nullable=False)
+    humidity = Column(Float, nullable=False)
+    timeStamp = Column(DateTime, default=datetime.utcnow)
+
+    substation = relationship("Substation", back_populates="weather_logs")
+
+class OutagePrediction(Base):
+    __tablename__ = "outage_predictions"
+    predictionID = Column(Integer, primary_key=True, index=True)
+    subStationID = Column(Integer, ForeignKey("substations.subStationID"), nullable=False)
+    timeStamp = Column(DateTime, default=datetime.utcnow)
+    failureProbScore = Column(Float, nullable=False)
+    riskLevel = Column(String, nullable=False)
+
+    substation = relationship("Substation", back_populates="outage_predictions")

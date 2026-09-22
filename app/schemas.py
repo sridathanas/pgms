@@ -3,7 +3,6 @@ from typing import Literal, Optional
 from datetime import datetime
 
 
-# User Accounts
 class UserAccountBase(BaseModel):
     username: str
     role: Literal["ADMIN", "OPERATOR", "TECHNICIAN"]
@@ -17,13 +16,12 @@ class UserAccountBase(BaseModel):
     currentLocation: Optional[str] = None
 
 class UserAccountCreate(UserAccountBase):
-    password: str  # plain text in, hashed by crud.create_user before storage
+    password: str
 
 class UserAccount(UserAccountBase):
     userID: int
     model_config = ConfigDict(from_attributes=True)
 
-# Power Stations
 class PowerStationBase(BaseModel):
     stationName: str
     location: str
@@ -37,7 +35,6 @@ class PowerStation(PowerStationBase):
     powerStationID: int
     model_config = ConfigDict(from_attributes=True)
 
-# Substations
 class SubstationBase(BaseModel):
     subStationName: str
     latitude: float
@@ -53,7 +50,6 @@ class Substation(SubstationBase):
     powerStationID: int
     model_config = ConfigDict(from_attributes=True)
 
-# Consumers
 class ConsumerBase(BaseModel):
     name: str
     address: str
@@ -68,7 +64,6 @@ class Consumer(ConsumerBase):
     subStationID: int
     model_config = ConfigDict(from_attributes=True)
 
-# Usage Logs
 class UsageLogBase(BaseModel):
     consumptionKWH: float
 
@@ -81,7 +76,6 @@ class UsageLog(UsageLogBase):
     timeStamp: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# Alerts
 class AlertBase(BaseModel):
     alertType: str
     severity: str
@@ -98,7 +92,6 @@ class Alert(AlertBase):
     timeStamp: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# Maintenance Tickets
 class MaintenanceTicketBase(BaseModel):
     ticketStatus: str
     resolutionNotes: Optional[str] = None
@@ -112,4 +105,43 @@ class MaintenanceTicket(MaintenanceTicketBase):
     alertID: int
     assignedTechnicianID: Optional[int]
     createdDate: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class SubstationSensorLogBase(BaseModel):
+    currentLoadMW: float
+
+class SubstationSensorLogCreate(SubstationSensorLogBase):
+    subStationID: int
+
+class SubstationSensorLog(SubstationSensorLogBase):
+    sensorLogID: int
+    subStationID: int
+    timeStamp: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class WeatherDataBase(BaseModel):
+    temperature: float
+    windSpeed: float
+    humidity: float
+
+class WeatherDataCreate(WeatherDataBase):
+    subStationID: int
+
+class WeatherData(WeatherDataBase):
+    weatherID: int
+    subStationID: int
+    timeStamp: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class OutagePredictionBase(BaseModel):
+    failureProbScore: float
+    riskLevel: str
+
+class OutagePredictionCreate(OutagePredictionBase):
+    subStationID: int
+
+class OutagePrediction(OutagePredictionBase):
+    predictionID: int
+    subStationID: int
+    timeStamp: datetime
     model_config = ConfigDict(from_attributes=True)
