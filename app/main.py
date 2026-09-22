@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request, Depends
@@ -10,10 +11,28 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import models, database, crud, auth
 from app.routers import admin, operator, technician
 from app.routers import auth as auth_router
+from app.scheduler import start_scheduler, stop_scheduler
 
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="AI-Enabled Smart Power Grid Management System")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: run the AI outage prediction loop in the background
+    print("Initializing AI background scheduler...")
+    start_scheduler()
+    yield
+    # Shutdown: stop the loop, otherwise its thread holds up restarts and reloads
+    stop_scheduler()
+    print("Shutting down Power Grid Management System...")
+
+
+app = FastAPI(
+    title="AI-Enabled Smart Power Grid Management System",
+    description="Centralized platform for grid operations and AI predictive maintenance.",
+    version="1.0",
+    lifespan=lifespan,
+)
 
 # Signs the session cookie. Set PGMS_SECRET_KEY outside local development.
 SECRET_KEY = os.environ.get("PGMS_SECRET_KEY", "pgms-dev-only-secret-change-me")

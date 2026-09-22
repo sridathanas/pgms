@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from app import auth, database, crud, schemas, models
+from app import auth, database, crud, schemas, models, scheduler
 
 router = APIRouter(
     prefix="/operator",
@@ -28,7 +28,12 @@ def operator_dashboard(request: Request, db: Session = Depends(database.get_db))
             "consumers": consumers,
             "alerts": alerts,
             "technicians": technicians,
-            "tickets": tickets
+            "tickets": tickets,
+            "grid_risk": crud.get_grid_risk_overview(db),
+            "prediction_interval_label": scheduler.interval_label(),
+            "alert_risk": crud.get_alert_risk_context(db, alerts),
+            "alert_threshold": scheduler.ALERT_THRESHOLD,
+            "unresolved_statuses": scheduler.UNRESOLVED_ALERT_STATUSES
         }
     )
 

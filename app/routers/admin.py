@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from app import auth, database, crud, schemas, models
+from app import auth, database, crud, schemas, models, scheduler
 
 router = APIRouter(
     prefix="/admin",
@@ -23,9 +23,31 @@ def admin_dashboard(request: Request, db: Session = Depends(database.get_db)):
             "power_stations": power_stations,
             "substations": substations,
             "pending_admins": crud.get_pending_admins(db),
+            "grid_risk": crud.get_grid_risk_overview(db),
+            "prediction_interval_label": scheduler.interval_label(),
+            "can_run_prediction": True,
             "flash": request.session.pop("flash", None)
         }
     )
+
+@router.post("/run-prediction")
+def run_prediction_now(
+    request: Request,
+    admin_user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    """Run one AI prediction cycle immediately instead of waiting for the 15-minute loop."""
+    result = scheduler.run_prediction_cycle()
+    if not result["ok"] and result.get("reason") == "model_missing":
+        request.session["flash"] = "Model file not found. Run `python train_model.py` first."
+    elif not result["ok"]:
+        request.session["flash"] = f"Prediction run failed: {result.get('reason')}"
+    else:
+        request.session["flash"] = (f"Prediction run complete: scored {result['scored']} substation(s), "
+                                    f"raised {result['alerts']} new alert(s).")
+        crud.log_action(db, "AI_PREDICTION_RUN",
+                        f"{admin_user.username} ran the prediction cycle manually", admin_user.userID)
+    return RedirectResponse(url="/admin", status_code=303)
 
 def review_admin_request(request: Request, db: Session, reviewer: models.UserAccount, user_id: int, approve: bool):
     user = crud.get_user(db, user_id)
