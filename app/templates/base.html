@@ -13,8 +13,14 @@
     <nav class="bg-blue-900 text-white p-4 shadow-md">
         <div class="container mx-auto flex flex-wrap justify-between items-center gap-3">
             <h1 class="text-xl font-bold">Smart Power Grid (PGMS)</h1>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center gap-4">
                 <a href="/" class="hover:text-blue-300">Home</a>
+                {% if current_user and current_user.role == 'ADMIN' %}
+                <a href="/admin/users" class="hover:text-blue-300">Users</a>
+                <a href="/admin/report" class="hover:text-blue-300">Report</a>
+                <a href="/admin/logs" class="hover:text-blue-300">Logs</a>
+                <a href="/admin/settings" class="hover:text-blue-300">Settings</a>
+                {% endif %}
                 {% if current_user %}
                 <span class="text-sm text-blue-100">
                     {{ current_user.name or current_user.username }}

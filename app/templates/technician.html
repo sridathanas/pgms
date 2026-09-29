@@ -1,31 +1,142 @@
 {% extends "base.html" %}
+
+{% macro status_pill(status) -%}
+<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+    {% if status == 'IN_PROGRESS' %}bg-blue-100 text-blue-800
+    {% elif status == 'RESOLVED' %}bg-green-100 text-green-800
+    {% elif status == 'CLOSED' %}bg-gray-200 text-gray-700
+    {% elif status == 'CANNOT_FIX' %}bg-red-100 text-red-800
+    {% else %}bg-yellow-100 text-yellow-800{% endif %}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro job_summary(t) -%}
+<p class="mt-2 text-sm text-gray-600">
+    Alert #{{ t.alertID }}{% if t.alert %} &middot; {{ t.alert.alertType }} ({{ t.alert.severity }}){% endif %}
+    {% if t.alert and t.alert.substation %}<br><span class="text-gray-500">{{ t.alert.substation.subStationName }}</span>{% endif %}
+</p>
+{% if t.alert and t.alert.description %}
+<p class="mt-1 text-xs text-gray-500">{{ t.alert.description }}</p>
+{% endif %}
+{%- endmacro %}
+
 {% block content %}
 <div class="space-y-6">
-    <div>
-        <h2 class="text-2xl font-bold text-blue-900 mb-2">My Assigned Jobs</h2>
-        <p class="text-gray-600">Maintenance tickets dispatched to you by the operator.</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h2 class="text-2xl font-bold text-blue-900 mb-1">My Jobs</h2>
+            <p class="text-gray-600">Accept a job, add a photo of the work, then set the outcome.</p>
+        </div>
+        <span class="px-3 py-1 text-sm font-semibold rounded-full
+            {% if availability == 'BUSY' %}bg-amber-100 text-amber-800{% else %}bg-green-100 text-green-800{% endif %}">
+            {{ availability }}
+        </span>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2">
-        {% for t in tickets %}
+    {% if flash %}
+    <div role="status" class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{{ flash }}</div>
+    {% endif %}
+
+    <!-- Jobs dispatched to me -->
+    <div class="space-y-4">
+        {% for t in my_jobs %}
         <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
             <div class="flex items-center justify-between gap-2">
                 <span class="font-semibold text-gray-900">Ticket #{{ t.ticketID }}</span>
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">{{ t.ticketStatus }}</span>
+                {{ status_pill(t.ticketStatus) }}
             </div>
-            <p class="mt-2 text-sm text-gray-600">
-                Alert #{{ t.alertID }}{% if t.alert %} &middot; {{ t.alert.alertType }} ({{ t.alert.severity }}){% endif %}
-            </p>
-            {% if t.createdDate %}
-            <p class="mt-1 text-xs text-gray-500">Created {{ t.createdDate.strftime('%d %b %Y, %H:%M') }}</p>
-            {% endif %}
+            {{ job_summary(t) }}
             {% if t.resolutionNotes %}
             <p class="mt-2 text-sm text-gray-700">{{ t.resolutionNotes }}</p>
             {% endif %}
+
+            {% if t.ticketStatus == 'ASSIGNED' %}
+            <form action="/technician/jobs/{{ t.ticketID }}/accept" method="POST" class="mt-4">
+                <button type="submit" class="w-full sm:w-auto rounded-md bg-blue-900 px-4 py-2 font-medium text-white hover:bg-blue-800">
+                    Accept job
+                </button>
+            </form>
+            {% else %}
+            {% if t.proofPhotoPath %}
+            <div class="mt-4">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Proof photo</p>
+                <img src="{{ t.proofPhotoPath }}" alt="Proof photo for ticket {{ t.ticketID }}"
+                     class="mt-1 max-h-48 rounded-md border border-gray-200">
+            </div>
+            {% endif %}
+
+            <form action="/technician/jobs/{{ t.ticketID }}/proof" method="POST" enctype="multipart/form-data"
+                  class="mt-4 flex flex-wrap items-center gap-2">
+                <input type="file" name="photo" accept="image/*" required
+                       class="text-sm text-gray-700 file:mr-2 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-blue-900">
+                <button type="submit" class="rounded-md border border-blue-900 px-3 py-2 text-sm font-medium text-blue-900 hover:bg-blue-50">
+                    {% if t.proofPhotoPath %}Replace photo{% else %}Upload photo{% endif %}
+                </button>
+            </form>
+
+            <form action="/technician/jobs/{{ t.ticketID }}/status" method="POST" class="mt-4 space-y-2">
+                <label for="notes-{{ t.ticketID }}" class="block text-sm font-medium text-gray-700">Work notes</label>
+                <textarea id="notes-{{ t.ticketID }}" name="notes" rows="2"
+                          placeholder="What did you find and do?"
+                          class="block w-full rounded-md border border-gray-300 p-2 text-sm"></textarea>
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" name="outcome" value="RESOLVED"
+                            class="rounded-md bg-green-700 px-4 py-2 font-medium text-white hover:bg-green-800">
+                        Mark resolved
+                    </button>
+                    <button type="submit" name="outcome" value="CANNOT_FIX"
+                            class="rounded-md border border-red-300 px-4 py-2 font-medium text-red-700 hover:bg-red-50">
+                        Cannot fix
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500">A photo is required before a job can be marked resolved.</p>
+            </form>
+            {% endif %}
         </div>
         {% else %}
-        <p class="sm:col-span-2 py-8 text-center text-sm text-gray-500">No jobs are assigned to you right now.</p>
+        <p class="py-6 text-center text-sm text-gray-500">No jobs are assigned to you right now.</p>
         {% endfor %}
     </div>
+
+    <!-- Unassigned queue -->
+    {% if queue %}
+    <div class="bg-amber-50 p-4 rounded-lg border border-amber-200">
+        <h3 class="text-lg font-semibold text-gray-800">Waiting for a technician</h3>
+        <p class="mt-1 mb-3 text-sm text-gray-600">These jobs were queued because nobody was free. Any technician can take them.</p>
+        <div class="space-y-3">
+            {% for t in queue %}
+            <div class="bg-white p-3 rounded-md border border-amber-200">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-semibold text-gray-900">Ticket #{{ t.ticketID }}</span>
+                    {{ status_pill(t.ticketStatus) }}
+                </div>
+                {{ job_summary(t) }}
+                <form action="/technician/jobs/{{ t.ticketID }}/accept" method="POST" class="mt-3">
+                    <button type="submit" class="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
+                        Take this job
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Finished work -->
+    {% if history %}
+    <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+        <h3 class="text-lg font-semibold text-gray-800 mb-3">Finished jobs</h3>
+        <div class="space-y-2">
+            {% for t in history %}
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2 text-sm">
+                <span class="font-medium text-gray-900">Ticket #{{ t.ticketID }}</span>
+                <span class="text-gray-500">
+                    {% if t.resolvedDate %}{{ t.resolvedDate.strftime('%d %b, %H:%M') }} UTC{% endif %}
+                </span>
+                {{ status_pill(t.ticketStatus) }}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

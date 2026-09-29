@@ -82,40 +82,269 @@ def reject_admin_request(
 ):
     return review_admin_request(request, db, reviewer, user_id, approve=False)
 
+def back_to_admin(request: Request, message: str, path: str = "/admin"):
+    request.session["flash"] = message
+    return RedirectResponse(url=path, status_code=303)
+
 @router.post("/power-station")
 def add_power_station(
+    request: Request,
     stationName: str = Form(...),
     location: str = Form(...),
     maxCapacityMW: float = Form(...),
     status: str = Form("ACTIVE"),
+    user: models.UserAccount = Depends(auth.require_login),
     db: Session = Depends(database.get_db)
 ):
-    station_data = schemas.PowerStationCreate(
+    stationName = stationName.strip()
+    if crud.power_station_name_taken(db, stationName):  # F3
+        return back_to_admin(request, f"A power station named '{stationName}' already exists.")
+
+    station = crud.create_power_station(db, schemas.PowerStationCreate(
         stationName=stationName,
-        location=location,
+        location=location.strip(),
         maxCapacityMW=maxCapacityMW,
         status=status
-    )
-    crud.create_power_station(db, station_data)
-    return RedirectResponse(url="/admin", status_code=303)
+    ))
+    crud.log_action(db, "POWER_STATION_ADDED",
+                    f"{user.username} added power station '{station.stationName}'", user.userID)
+    return back_to_admin(request, f"Added power station '{station.stationName}'.")
+
+@router.post("/power-station/{station_id}/update")
+def update_power_station(
+    station_id: int,
+    request: Request,
+    stationName: str = Form(...),
+    location: str = Form(...),
+    maxCapacityMW: float = Form(...),
+    status: str = Form("ACTIVE"),
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    """F2: keep infrastructure records current as the grid changes."""
+    station = crud.get_power_station(db, station_id)
+    if station is None:
+        return back_to_admin(request, "That power station no longer exists.")
+    stationName = stationName.strip()
+    if crud.power_station_name_taken(db, stationName, exclude_id=station_id):
+        return back_to_admin(request, f"A power station named '{stationName}' already exists.")
+
+    crud.update_power_station(db, station, stationName=stationName, location=location.strip(),
+                              maxCapacityMW=maxCapacityMW, status=status)
+    crud.log_action(db, "POWER_STATION_UPDATED",
+                    f"{user.username} updated power station #{station_id}", user.userID)
+    return back_to_admin(request, f"Updated '{station.stationName}'.")
+
+@router.post("/power-station/{station_id}/delete")
+def delete_power_station(
+    station_id: int,
+    request: Request,
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    """F2: decommission a station, but never orphan the substations under it."""
+    station = crud.get_power_station(db, station_id)
+    if station is None:
+        return back_to_admin(request, "That power station no longer exists.")
+
+    child_count = crud.count_substations_of(db, station_id)
+    if child_count:
+        return back_to_admin(request, f"'{station.stationName}' still has {child_count} substation(s). "
+                                      "Move or delete those first.")
+
+    name = station.stationName
+    crud.delete_power_station(db, station)
+    crud.log_action(db, "POWER_STATION_DELETED", f"{user.username} deleted power station '{name}'", user.userID)
+    return back_to_admin(request, f"Deleted '{name}'.")
 
 @router.post("/substation")
 def add_substation(
+    request: Request,
     subStationName: str = Form(...),
     powerStationID: int = Form(...),
     latitude: float = Form(...),
     longitude: float = Form(...),
     maxLoadCapacityMW: float = Form(...),
     stationStatus: str = Form("ACTIVE"),
+    user: models.UserAccount = Depends(auth.require_login),
     db: Session = Depends(database.get_db)
 ):
-    sub_data = schemas.SubstationCreate(
+    subStationName = subStationName.strip()
+    if crud.substation_name_taken(db, subStationName):  # F3
+        return back_to_admin(request, f"A substation named '{subStationName}' already exists.")
+    if crud.get_power_station(db, powerStationID) is None:
+        return back_to_admin(request, "Choose a valid parent power station.")
+
+    substation = crud.create_substation(db, schemas.SubstationCreate(
         subStationName=subStationName,
         powerStationID=powerStationID,
         latitude=latitude,
         longitude=longitude,
         maxLoadCapacityMW=maxLoadCapacityMW,
         stationStatus=stationStatus
+    ))
+    crud.log_action(db, "SUBSTATION_ADDED",
+                    f"{user.username} added substation '{substation.subStationName}'", user.userID)
+    return back_to_admin(request, f"Added substation '{substation.subStationName}'.")
+
+@router.post("/substation/{substation_id}/update")
+def update_substation(
+    substation_id: int,
+    request: Request,
+    subStationName: str = Form(...),
+    maxLoadCapacityMW: float = Form(...),
+    stationStatus: str = Form(...),
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    """updateSubstationData() from Activity Diagram 1."""
+    substation = crud.get_substation(db, substation_id)
+    if substation is None:
+        return back_to_admin(request, "That substation no longer exists.")
+    subStationName = subStationName.strip()
+    if crud.substation_name_taken(db, subStationName, exclude_id=substation_id):
+        return back_to_admin(request, f"A substation named '{subStationName}' already exists.")
+
+    crud.update_substation(db, substation, subStationName=subStationName,
+                           maxLoadCapacityMW=maxLoadCapacityMW, stationStatus=stationStatus)
+    crud.log_action(db, "SUBSTATION_UPDATED",
+                    f"{user.username} updated substation #{substation_id} ({stationStatus})", user.userID)
+    return back_to_admin(request, f"Updated '{substation.subStationName}'.")
+
+@router.post("/substation/{substation_id}/delete")
+def delete_substation(
+    substation_id: int,
+    request: Request,
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    substation = crud.get_substation(db, substation_id)
+    if substation is None:
+        return back_to_admin(request, "That substation no longer exists.")
+
+    consumers = crud.count_consumers_of(db, substation_id)
+    if consumers:
+        return back_to_admin(request, f"'{substation.subStationName}' still supplies {consumers} consumer(s). "
+                                      "Move them to another substation first.")
+    open_alerts = crud.count_open_alerts_of(db, substation_id)
+    if open_alerts:
+        return back_to_admin(request, f"'{substation.subStationName}' has {open_alerts} unresolved alert(s). "
+                                      "Close them before deleting it.")
+
+    name = substation.subStationName
+    crud.delete_substation(db, substation)
+    crud.log_action(db, "SUBSTATION_DELETED",
+                    f"{user.username} deleted substation '{name}' and its telemetry", user.userID)
+    return back_to_admin(request, f"Deleted '{name}'.")
+
+# User management (the "Manage Users" branch of the flowchart)
+@router.get("/users")
+def manage_users(
+    request: Request,
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_users.html",
+        {
+            "title": "Manage Users",
+            "users": crud.get_users(db),
+            "current_user_id": user.userID,
+            "flash": request.session.pop("flash", None),
+        }
     )
-    crud.create_substation(db, sub_data)
-    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/users/{user_id}/active")
+def set_user_active(
+    user_id: int,
+    request: Request,
+    active: str = Form(...),
+    admin_user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    target = crud.get_user(db, user_id)
+    if target is None:
+        return back_to_admin(request, "That account no longer exists.", "/admin/users")
+    if target.userID == admin_user.userID:
+        return back_to_admin(request, "You cannot deactivate your own account.", "/admin/users")
+
+    make_active = active == "1"
+    crud.set_user_active(db, target, make_active)
+    state = "reactivated" if make_active else "deactivated"
+    crud.log_action(db, f"USER_{state.upper()}",
+                    f"{admin_user.username} {state} {target.username}", admin_user.userID)
+    return back_to_admin(request, f"{target.name or target.username} {state}.", "/admin/users")
+
+# Audit log ("View Global Audit Reports" / View System Logs)
+@router.get("/logs")
+def system_logs(
+    request: Request,
+    action: str = "",
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_logs.html",
+        {
+            "title": "System Logs",
+            "logs": crud.get_system_logs(db, limit=200, action_type=action or None),
+            "action_types": crud.get_log_action_types(db),
+            "selected_action": action,
+        }
+    )
+
+# adjustAIThresholds()
+@router.get("/settings")
+def settings_page(
+    request: Request,
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_settings.html",
+        {
+            "title": "System Settings",
+            "alert_threshold": crud.get_float_setting(db, "alert_threshold"),
+            "medium_threshold": crud.get_float_setting(db, "medium_risk_threshold"),
+            "interval_label": scheduler.interval_label(),
+            "flash": request.session.pop("flash", None),
+        }
+    )
+
+@router.post("/settings")
+def save_settings(
+    request: Request,
+    alert_threshold: float = Form(...),
+    medium_risk_threshold: float = Form(...),
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    if not 0.0 < alert_threshold <= 1.0 or not 0.0 < medium_risk_threshold <= 1.0:
+        return back_to_admin(request, "Thresholds must be between 0 and 1.", "/admin/settings")
+    if medium_risk_threshold >= alert_threshold:
+        return back_to_admin(request, "The medium threshold must be lower than the alert threshold.",
+                             "/admin/settings")
+
+    crud.set_setting(db, "alert_threshold", f"{alert_threshold}", user.userID)
+    crud.set_setting(db, "medium_risk_threshold", f"{medium_risk_threshold}", user.userID)
+    crud.log_action(db, "AI_THRESHOLDS_UPDATED",
+                    f"{user.username} set the alert threshold to {alert_threshold:.2f} "
+                    f"and the medium threshold to {medium_risk_threshold:.2f}", user.userID)
+    return back_to_admin(request, "AI thresholds updated. The next prediction cycle uses them.",
+                         "/admin/settings")
+
+# F16 Grid Health Report
+@router.get("/report")
+def grid_health_report(
+    request: Request,
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_report.html",
+        {"title": "Grid Health Report", "report": crud.build_grid_health_report(db)}
+    )

@@ -7,6 +7,62 @@
             and dispatch maintenance tickets.</p>
     </div>
 
+    {% if flash %}
+    <div role="status" class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{{ flash }}</div>
+    {% endif %}
+
+    {% if tickets_awaiting_review %}
+    <div class="bg-green-50 p-6 rounded-lg border border-green-200 shadow-sm">
+        <h3 class="text-lg font-semibold text-gray-800">
+            Repairs Awaiting Your Review
+            <span class="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-200 text-green-900">{{ tickets_awaiting_review|length }}</span>
+        </h3>
+        <p class="mt-1 mb-4 text-sm text-gray-600">A technician marked these done. Check the photo, then close the
+            ticket to clear the alert, or send it back.</p>
+        <div class="space-y-4">
+            {% for t in tickets_awaiting_review %}
+            <div class="bg-white p-4 rounded-md border border-green-200">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="font-semibold text-gray-900">
+                        Ticket #{{ t.ticketID }} &middot; Alert #{{ t.alertID }}
+                        {% if t.alert and t.alert.substation %}&middot; {{ t.alert.substation.subStationName }}{% endif %}
+                    </span>
+                    <span class="text-sm text-gray-500">
+                        {{ t.technician.name or t.technician.username if t.technician else "Unassigned" }}
+                        {% if t.resolvedDate %}&middot; {{ t.resolvedDate.strftime('%d %b, %H:%M') }} UTC{% endif %}
+                    </span>
+                </div>
+                {% if t.resolutionNotes %}
+                <p class="mt-2 text-sm text-gray-700">{{ t.resolutionNotes }}</p>
+                {% endif %}
+                {% if t.proofPhotoPath %}
+                <a href="{{ t.proofPhotoPath }}" target="_blank" rel="noopener">
+                    <img src="{{ t.proofPhotoPath }}" alt="Proof photo for ticket {{ t.ticketID }}"
+                         class="mt-3 max-h-40 rounded-md border border-gray-200">
+                </a>
+                {% else %}
+                <p class="mt-2 text-xs text-amber-700">No proof photo attached.</p>
+                {% endif %}
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <form action="/operator/ticket/{{ t.ticketID }}/close" method="POST">
+                        <button type="submit" class="rounded-md bg-green-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-800">
+                            Verify &amp; close
+                        </button>
+                    </form>
+                    <form action="/operator/ticket/{{ t.ticketID }}/reopen" method="POST" class="flex flex-wrap items-center gap-2">
+                        <input type="text" name="reason" placeholder="What still needs doing?"
+                               class="rounded-md border border-gray-300 p-1.5 text-sm">
+                        <button type="submit" class="rounded-md border border-amber-400 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-50">
+                            Send back
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         <!-- Register Consumer Form -->
         <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-sm">
@@ -59,12 +115,23 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Assign Technician</label>
-                    <select name="assignedTechnicianID" required
+                    <select name="assignedTechnicianID"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
-                        {% for tech in technicians %}
-                        <option value="{{ tech.userID }}">{{ tech.username }} (ID: {{ tech.userID }})</option>
+                        {% if available_technicians %}
+                        {% for tech in available_technicians %}
+                        <option value="{{ tech.userID }}">
+                            {{ tech.name or tech.username }}{% if tech.skillLevel %} &middot; {{ tech.skillLevel }}{% endif %}{% if tech.currentLocation %} &middot; {{ tech.currentLocation }}{% endif %}
+                        </option>
                         {% endfor %}
+                        <option value="">Queue it instead (no technician yet)</option>
+                        {% else %}
+                        <option value="">No field units available &mdash; queue this ticket</option>
+                        {% endif %}
                     </select>
+                    {% if not available_technicians %}
+                    <p class="mt-1 text-xs text-amber-700">Every technician is busy. The ticket will wait in the queue
+                        until one is free.</p>
+                    {% endif %}
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Initial Notes</label>
@@ -156,6 +223,65 @@
         </div>
     </div>
 
+    <!-- Maintenance Tickets In Flight -->
+    <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-6">
+        <h3 class="text-lg font-semibold mb-4 text-gray-800">Maintenance Tickets In Progress</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Technician</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for t in open_tickets %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ t.ticketID }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            #{{ t.alertID }}{% if t.alert %} &middot; {{ t.alert.alertType }}{% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ t.technician.name or t.technician.username if t.technician else "—" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {% if t.ticketStatus == 'IN_PROGRESS' %}bg-blue-100 text-blue-800
+                                {% elif t.ticketStatus == 'CANNOT_FIX' %}bg-red-100 text-red-800
+                                {% else %}bg-yellow-100 text-yellow-800{% endif %}">{{ t.ticketStatus }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% if t.ticketStatus in ("OPEN", "CANNOT_FIX") %}
+                            {% if available_technicians %}
+                            <form action="/operator/ticket/{{ t.ticketID }}/assign" method="POST" class="flex items-center gap-2">
+                                <select name="assignedTechnicianID" required class="rounded-md border border-gray-300 p-1.5 text-sm">
+                                    {% for tech in available_technicians %}
+                                    <option value="{{ tech.userID }}">{{ tech.name or tech.username }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="text-blue-800 bg-blue-100 px-2 py-1 rounded hover:text-blue-950">Dispatch</button>
+                            </form>
+                            {% else %}
+                            <span class="text-xs text-amber-700">No field units available</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-xs text-gray-400">With the technician</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No tickets are open right now.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Consumer Registry Table -->
     <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-6">
         <h3 class="text-lg font-semibold mb-4 text-gray-800">Registered Consumers (Households)</h3>
@@ -173,6 +299,8 @@
                             Substation ID</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Connection</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -183,12 +311,22 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ c.contactNo }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ c.subStationID }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span
-                                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{
+                                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {% if c.connectionStatus == 'ACTIVE' %}bg-green-100 text-green-800{% else %}bg-gray-200 text-gray-700{% endif %}">{{
                                 c.connectionStatus }}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <form action="/operator/consumer/{{ c.consumerID }}/status" method="POST" class="inline">
+                                <input type="hidden" name="connectionStatus"
+                                       value="{{ 'DISCONNECTED' if c.connectionStatus == 'ACTIVE' else 'ACTIVE' }}">
+                                <button type="submit" class="px-2 py-1 rounded text-gray-700 bg-gray-100 hover:text-gray-900">
+                                    {{ "Disconnect" if c.connectionStatus == 'ACTIVE' else "Reconnect" }}
+                                </button>
+                            </form>
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No consumer records
+                        <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No consumer records
                             registered yet.</td>
                     </tr>
                     {% endfor %}

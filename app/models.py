@@ -14,6 +14,32 @@ class ApprovalStatus:
     PENDING = "PENDING"
     REJECTED = "REJECTED"
 
+class Availability:
+    AVAILABLE = "AVAILABLE"
+    BUSY = "BUSY"
+
+class TicketStatus:
+    """Ticket lifecycle from the class diagram, plus CANNOT_FIX from F15."""
+    OPEN = "OPEN"              # waiting in the queue, no technician yet
+    ASSIGNED = "ASSIGNED"      # dispatched to a technician
+    IN_PROGRESS = "IN_PROGRESS"  # technician accepted the job
+    RESOLVED = "RESOLVED"      # technician finished, operator has not confirmed
+    CANNOT_FIX = "CANNOT_FIX"  # technician could not fix it, escalated
+    CLOSED = "CLOSED"          # operator confirmed the fix
+
+class AlertStatus:
+    OPEN = "OPEN"
+    VERIFIED_HIGH_SEVERITY = "VERIFIED_HIGH_SEVERITY"
+    IN_PROGRESS = "IN_PROGRESS"
+    CLOSED = "CLOSED"
+    DISMISSED = "DISMISSED"
+
+class StationStatus:
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    MAINTENANCE = "MAINTENANCE"
+    CRITICAL_FAIL = "CRITICAL_FAIL"
+
 class UserAccount(Base):
     __tablename__ = "user_accounts"
     userID = Column(Integer, primary_key=True, index=True)
@@ -96,21 +122,30 @@ class Alert(Base):
     consumerID = Column(Integer, ForeignKey("consumers.consumerID"), nullable=True)
     alertType = Column(String)
     severity = Column(String)
+    description = Column(String, nullable=True)
     timeStamp = Column(DateTime, default=datetime.utcnow)
     status = Column(String)
 
     maintenance_tickets = relationship("MaintenanceTicket", back_populates="alert")
+    substation = relationship("Substation")
+    consumer = relationship("Consumer")
 
 class MaintenanceTicket(Base):
     __tablename__ = "maintenance_tickets"
     ticketID = Column(Integer, primary_key=True, index=True)
     alertID = Column(Integer, ForeignKey("alerts.alertID"))
     assignedTechnicianID = Column(Integer, ForeignKey("user_accounts.userID"), nullable=True)
+    operatorID = Column(Integer, ForeignKey("user_accounts.userID"), nullable=True)
     createdDate = Column(DateTime, default=datetime.utcnow)
+    assignedDate = Column(DateTime, nullable=True)
+    resolvedDate = Column(DateTime, nullable=True)
     ticketStatus = Column(String)
     resolutionNotes = Column(String, nullable=True)
+    proofPhotoPath = Column(String, nullable=True)  # static path of the technician's photo
 
     alert = relationship("Alert", back_populates="maintenance_tickets")
+    technician = relationship("UserAccount", foreign_keys=[assignedTechnicianID])
+    operator = relationship("UserAccount", foreign_keys=[operatorID])
 
 class SubstationSensorLog(Base):
     __tablename__ = "substation_sensor_logs"
@@ -141,3 +176,11 @@ class OutagePrediction(Base):
     riskLevel = Column(String, nullable=False)
 
     substation = relationship("Substation", back_populates="outage_predictions")
+
+class SystemSetting(Base):
+    """Admin-tunable values, e.g. the AI alert threshold (adjustAIThresholds())."""
+    __tablename__ = "system_settings"
+    settingKey = Column(String, primary_key=True, index=True)
+    settingValue = Column(String, nullable=False)
+    updatedAt = Column(DateTime, default=datetime.utcnow)
+    updatedByUserID = Column(Integer, ForeignKey("user_accounts.userID"), nullable=True)

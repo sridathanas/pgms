@@ -2,3 +2,4 @@ venv/
 pgms.db
 __pycache__/
 outage_model.joblib
+app/static/uploads/

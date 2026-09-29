@@ -184,36 +184,74 @@ def create_alerts_and_tickets(db, substations, consumers):
     technicians = db.query(models.UserAccount).filter(
         models.UserAccount.role == models.Role.TECHNICIAN).order_by(models.UserAccount.userID).all()
 
+    operator = db.query(models.UserAccount).filter(
+        models.UserAccount.role == models.Role.OPERATOR).order_by(models.UserAccount.userID).first()
+    operator_id = operator.userID if operator else None
+
     overload_open = models.Alert(
         subStationID=substations[0].subStationID, alertType="OverloadRisk", severity="HIGH",
-        status="OPEN", timeStamp=now - timedelta(minutes=12))
+        status=models.AlertStatus.OPEN, timeStamp=now - timedelta(minutes=12),
+        description="Predicted failure probability 86% at Kottayam Main 220kV: load near capacity in hot weather.")
     overload_verified = models.Alert(
         subStationID=substations[1].subStationID, alertType="OverloadRisk", severity="MEDIUM",
-        status="VERIFIED_HIGH_SEVERITY", timeStamp=now - timedelta(hours=5))
+        status=models.AlertStatus.IN_PROGRESS, timeStamp=now - timedelta(hours=5),
+        description="Transformer cooling suspected at Pala 110kV; technician dispatched.")
     theft_alert = models.Alert(
         consumerID=consumers[4].consumerID, alertType="TheftSuspected", severity="HIGH",
-        status="OPEN", timeStamp=now - timedelta(hours=2))
+        status=models.AlertStatus.OPEN, timeStamp=now - timedelta(hours=2),
+        description="Consumption dropped to near zero for 7 days while the connection stayed active.")
     weather_alert = models.Alert(
         subStationID=substations[4].subStationID, alertType="WeatherRisk", severity="LOW",
-        status="DISMISSED", timeStamp=now - timedelta(days=1))
-    db.add_all([overload_open, overload_verified, theft_alert, weather_alert])
+        status=models.AlertStatus.DISMISSED, timeStamp=now - timedelta(days=1),
+        description="High winds forecast near Vaikom 66kV. Reviewed and dismissed.")
+    feeder_alert = models.Alert(
+        subStationID=substations[2].subStationID, alertType="OverloadRisk", severity="MEDIUM",
+        status=models.AlertStatus.IN_PROGRESS, timeStamp=now - timedelta(hours=8),
+        description="Repeated load spikes on the Ettumanoor feeder.")
+    db.add_all([overload_open, overload_verified, theft_alert, weather_alert, feeder_alert])
     db.commit()
 
     tickets = [
+        # accepted, technician on site
         models.MaintenanceTicket(
             alertID=overload_verified.alertID,
-            assignedTechnicianID=technicians[0].userID if technicians else None,
-            createdDate=now - timedelta(hours=4), ticketStatus="IN_PROGRESS",
+            assignedTechnicianID=technicians[-1].userID if technicians else None,
+            operatorID=operator_id,
+            createdDate=now - timedelta(hours=4), assignedDate=now - timedelta(hours=4),
+            ticketStatus=models.TicketStatus.IN_PROGRESS,
             resolutionNotes="Inspect transformer cooling fans at Pala 110kV."),
+        # dispatched, not accepted yet
         models.MaintenanceTicket(
             alertID=theft_alert.alertID,
-            assignedTechnicianID=technicians[-1].userID if technicians else None,
-            createdDate=now - timedelta(hours=1), ticketStatus="ASSIGNED",
+            assignedTechnicianID=technicians[0].userID if technicians else None,
+            operatorID=operator_id,
+            createdDate=now - timedelta(hours=1), assignedDate=now - timedelta(hours=1),
+            ticketStatus=models.TicketStatus.ASSIGNED,
             resolutionNotes="Verify meter seal at Pala Rubber Works."),
+        # finished by the technician, waiting for the operator to verify and close
+        models.MaintenanceTicket(
+            alertID=feeder_alert.alertID,
+            assignedTechnicianID=technicians[0].userID if technicians else None,
+            operatorID=operator_id,
+            createdDate=now - timedelta(hours=9), assignedDate=now - timedelta(hours=9),
+            resolvedDate=now - timedelta(minutes=40),
+            ticketStatus=models.TicketStatus.RESOLVED,
+            resolutionNotes="Replaced the loose LT clamp and re-tightened the feeder termination."),
+        # nobody was free when this came in
+        models.MaintenanceTicket(
+            alertID=overload_open.alertID,
+            operatorID=operator_id,
+            createdDate=now - timedelta(minutes=10),
+            ticketStatus=models.TicketStatus.OPEN,
+            resolutionNotes="Check load balancing at Kottayam Main before the evening peak."),
+        # already signed off
         models.MaintenanceTicket(
             alertID=weather_alert.alertID,
             assignedTechnicianID=technicians[0].userID if technicians else None,
-            createdDate=now - timedelta(days=1), ticketStatus="RESOLVED",
+            operatorID=operator_id,
+            createdDate=now - timedelta(days=1), assignedDate=now - timedelta(days=1),
+            resolvedDate=now - timedelta(hours=20),
+            ticketStatus=models.TicketStatus.CLOSED,
             resolutionNotes="Cleared fallen branch from the 66kV feeder. Line restored."),
     ]
     db.add_all(tickets)

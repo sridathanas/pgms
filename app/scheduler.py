@@ -7,13 +7,14 @@ import pandas as pd
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app import models
+from app import crud, models
 
 # Load the serialized Random Forest once, so the scheduled loop does no repeated disk I/O.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, "outage_model.joblib")
 
-# Thresholds from the UML activity diagram / SRS (F9)
+# Defaults from the UML activity diagram / SRS (F9). An administrator can override both
+# from Settings (adjustAIThresholds()); the stored value wins when one exists.
 ALERT_THRESHOLD = 0.80
 MEDIUM_RISK_THRESHOLD = 0.50
 # Short interval so the demo shows live scoring. Raise it (e.g. 15 * 60) for real use.
@@ -41,10 +42,11 @@ def interval_label() -> str:
     return f"{minutes} minute{'s' if minutes != 1 else ''}"
 
 
-def risk_level_for(score: float) -> str:
-    if score >= ALERT_THRESHOLD:
+def risk_level_for(score: float, alert_threshold: float = ALERT_THRESHOLD,
+                   medium_threshold: float = MEDIUM_RISK_THRESHOLD) -> str:
+    if score >= alert_threshold:
         return "HIGH"
-    if score >= MEDIUM_RISK_THRESHOLD:
+    if score >= medium_threshold:
         return "MEDIUM"
     return "LOW"
 
@@ -63,6 +65,9 @@ def run_prediction_cycle() -> dict:
     try:
         substations = db.query(models.Substation).all()
         alerts_created = 0
+        # Thresholds an administrator may have changed in Settings
+        alert_threshold = crud.get_float_setting(db, "alert_threshold")
+        medium_threshold = crud.get_float_setting(db, "medium_risk_threshold")
 
         for sub in substations:
             # 1. Hardware simulation: the SRS assumes simulated sensor data for this version
@@ -100,12 +105,12 @@ def run_prediction_cycle() -> dict:
             db.add(models.OutagePrediction(
                 subStationID=sub.subStationID,
                 failureProbScore=probability_score,
-                riskLevel=risk_level_for(probability_score),
+                riskLevel=risk_level_for(probability_score, alert_threshold, medium_threshold),
                 timeStamp=datetime.utcnow(),
             ))
 
             # 5. Raise an alert, unless this substation already has one waiting to be handled
-            if probability_score >= ALERT_THRESHOLD:
+            if probability_score >= alert_threshold:
                 already_open = db.query(models.Alert.alertID).filter(
                     models.Alert.subStationID == sub.subStationID,
                     models.Alert.alertType == "OverloadRisk",
@@ -116,7 +121,10 @@ def run_prediction_cycle() -> dict:
                         subStationID=sub.subStationID,
                         alertType="OverloadRisk",
                         severity="HIGH",
-                        status="OPEN",
+                        status=models.AlertStatus.OPEN,
+                        description=(f"Predicted failure probability {probability_score:.0%} at "
+                                     f"{sub.subStationName}: load {current_load_mw:.1f} MW of "
+                                     f"{sub.maxLoadCapacityMW} MW, {temp:.0f}°C, wind {wind:.0f} km/h."),
                         timeStamp=datetime.utcnow(),
                     ))
                     db.add(models.SystemLog(
