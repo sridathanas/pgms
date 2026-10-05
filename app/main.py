@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from app import models, database, crud, auth
-from app.routers import admin, operator, technician
+from app.routers import admin, operator, technician, consumer
 from app.routers import auth as auth_router
 from app.scheduler import start_scheduler, stop_scheduler
 
@@ -52,6 +52,7 @@ app.include_router(auth_router.router)
 app.include_router(admin.router)
 app.include_router(operator.router)
 app.include_router(technician.router)
+app.include_router(consumer.router)
 
 
 @app.exception_handler(auth.LoginRequired)

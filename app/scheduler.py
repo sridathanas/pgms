@@ -17,6 +17,7 @@ MODEL_PATH = os.path.join(BASE_DIR, "outage_model.joblib")
 # from Settings (adjustAIThresholds()); the stored value wins when one exists.
 ALERT_THRESHOLD = 0.80
 MEDIUM_RISK_THRESHOLD = 0.50
+VARIANCE_THRESHOLD = 0.50
 # Short interval so the demo shows live scoring. Raise it (e.g. 15 * 60) for real use.
 PREDICTION_INTERVAL_SECONDS = 10
 
@@ -66,8 +67,8 @@ def run_prediction_cycle() -> dict:
         substations = db.query(models.Substation).all()
         alerts_created = 0
         # Thresholds an administrator may have changed in Settings
-        alert_threshold = crud.get_float_setting(db, "alert_threshold")
-        medium_threshold = crud.get_float_setting(db, "medium_risk_threshold")
+        alert_threshold = crud.get_float_setting(db, "alert_threshold") or ALERT_THRESHOLD
+        medium_threshold = crud.get_float_setting(db, "medium_risk_threshold") or MEDIUM_RISK_THRESHOLD
 
         for sub in substations:
             # 1. Hardware simulation: the SRS assumes simulated sensor data for this version
@@ -146,6 +147,86 @@ def run_prediction_cycle() -> dict:
         db.close()
 
 
+def run_theft_detection_cycle() -> dict:
+    """Usage Tracking & Theft Detection (Activity Diagram 5).
+    
+    Calculates the 30-day moving average baseline and flags a CRITICAL alert
+    if the latest usage deviates by more than the defined variance threshold.
+    """
+    db: Session = SessionLocal()
+    try:
+        consumers = db.query(models.Consumer).all()
+        alerts_created = 0
+        
+        # Safely fetch dynamic variance threshold or fallback to default
+        try:
+            variance_threshold = crud.get_float_setting(db, "variance_threshold") or VARIANCE_THRESHOLD
+        except Exception:
+            variance_threshold = VARIANCE_THRESHOLD
+
+        for consumer in consumers:
+            # Fetch usage logs ordered by most recent
+            logs = (
+                db.query(models.UsageLog)
+                .filter(models.UsageLog.consumerID == consumer.consumerID)
+                .order_by(models.UsageLog.timeStamp.desc())
+                .all()
+            )
+
+            # Requires at least two data points to establish a baseline and a current reading
+            if not logs or len(logs) < 2:
+                continue
+
+            latest_usage = logs[0].consumptionKWH
+            historical_logs = logs[1:]
+
+            # Calculate baseline (historical moving average)
+            baseline = sum(log.consumptionKWH for log in historical_logs) / len(historical_logs)
+
+            if baseline == 0:
+                continue
+
+            variance = abs(latest_usage - baseline) / baseline
+
+            if variance > variance_threshold:
+                # Check for an unresolved theft alert to prevent dashboard spam
+                already_open = db.query(models.Alert.alertID).filter(
+                    models.Alert.consumerID == consumer.consumerID,
+                    models.Alert.alertType == "Theft Suspected",
+                    models.Alert.status.in_(UNRESOLVED_ALERT_STATUSES),
+                ).first()
+
+                if already_open is None:
+                    db.add(models.Alert(
+                        consumerID=consumer.consumerID,
+                        subStationID=consumer.subStationID,
+                        alertType="Theft Suspected",
+                        severity="CRITICAL",
+                        status=models.AlertStatus.OPEN,
+                        description=(f"Abnormal consumption variance of {variance:.0%} detected "
+                                     f"for {consumer.name}. Baseline: {baseline:.1f} kWh, "
+                                     f"Latest: {latest_usage:.1f} kWh."),
+                        timeStamp=datetime.utcnow(),
+                    ))
+                    db.add(models.SystemLog(
+                        actionType="THEFT_ALERT_TRIGGERED",
+                        description=(f"Variance of {variance:.2f} detected for Consumer "
+                                     f"{consumer.consumerID}. Alert generated."),
+                        timeStamp=datetime.utcnow(),
+                    ))
+                    alerts_created += 1
+
+        db.commit()
+        return {"ok": True, "consumers_checked": len(consumers), "alerts": alerts_created}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Theft detection cycle failed: {e}")
+        return {"ok": False, "reason": str(e), "consumers_checked": 0, "alerts": 0}
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Start the background prediction loop. Safe to call once at application startup."""
     global _scheduler
@@ -153,6 +234,7 @@ def start_scheduler():
         return _scheduler
 
     _scheduler = BackgroundScheduler()
+    
     _scheduler.add_job(
         run_prediction_cycle,
         "interval",
@@ -161,6 +243,16 @@ def start_scheduler():
         max_instances=1,
         coalesce=True,
     )
+    
+    _scheduler.add_job(
+        run_theft_detection_cycle,
+        "interval",
+        seconds=PREDICTION_INTERVAL_SECONDS,
+        id="theft_detection_cycle",
+        max_instances=1,
+        coalesce=True,
+    )
+    
     _scheduler.start()
     return _scheduler
 

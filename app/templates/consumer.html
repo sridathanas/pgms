@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if not consumer %}
+    <!-- Portal Lookup Form -->
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Consumer Portal Access</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Enter your unique Consumer ID to view your connection status and monthly power consumption.</p>
+                    <form method="POST" action="/portal/">
+                        <div class="mb-3">
+                            <label for="consumerID" class="form-label">Consumer ID</label>
+                            <input type="number" class="form-control" id="consumerID" name="consumerID" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Access Dashboard</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Consumer Data Dashboard (Requirement F6) -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2>Welcome, {{ consumer.name }}</h2>
+            <p class="text-muted">Service Address: {{ consumer.address }} | Linked Substation ID: {{ consumer.subStationID }}</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Connection Status Card -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-muted">Current Connection Status</h5>
+                    {% if consumer.connectionStatus == 'ACTIVE' %}
+                        <h2 class="text-success mt-3"><i class="bi bi-plug-fill"></i> ACTIVE</h2>
+                        <p class="mt-2">Your grid connection is stable and receiving power.</p>
+                    {% else %}
+                        <h2 class="text-danger mt-3"><i class="bi bi-x-circle-fill"></i> DISCONNECTED</h2>
+                        <p class="mt-2">Your connection has been suspended. Please contact support.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 30-Day Usage History Table -->
+        <div class="col-md-8 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Recent Consumption History (kWh)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Consumption (kWh)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in usage_logs %}
+                                <tr>
+                                    <td>{{ log.timeStamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td><strong>{{ "%.2f"|format(log.consumptionKWH) }}</strong></td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">No usage history found for this connection.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="text-start mt-3">
+        <a href="/portal/" class="btn btn-outline-secondary">← Back to Portal Login</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
