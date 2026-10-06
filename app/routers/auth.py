@@ -25,6 +25,13 @@ MIN_PASSWORD_LENGTH = 8
 SIGNED_UP_SESSION_KEY = "signed_up"  # {"username": ..., "pending": bool}, shown once on /login
 
 
+def weak_password(password: str) -> bool:
+    """Shared password rule: at least 8 characters, with a letter and a number."""
+    return (len(password) < MIN_PASSWORD_LENGTH
+            or not re.search(r"[A-Za-z]", password)
+            or not re.search(r"\d", password))
+
+
 def normalize_username(username: str) -> str:
     """Usernames are case-insensitive: stored and looked up in lowercase."""
     return username.strip().lower()
@@ -82,9 +89,7 @@ def validate_signup(db: Session, role: str, name: str, username: str, password: 
     elif crud.get_user_by_username(db, username):
         errors["username"] = "That username is already taken."
 
-    if (len(password) < MIN_PASSWORD_LENGTH
-            or not re.search(r"[A-Za-z]", password)
-            or not re.search(r"\d", password)):
+    if weak_password(password):
         errors["password"] = "Use at least 8 characters, with a letter and a number."
     elif len(password.encode("utf-8")) > security.MAX_PASSWORD_BYTES:
         errors["password"] = f"Password is too long ({security.MAX_PASSWORD_BYTES} bytes max)."

@@ -66,6 +66,7 @@ def set_technician_availability(db: Session, technician: models.UserAccount, sta
 DEFAULT_SETTINGS = {
     "alert_threshold": "0.80",
     "medium_risk_threshold": "0.50",
+    "variance_threshold": "0.50",  # theft detection: how far usage may drift from the baseline
 }
 
 def get_setting(db: Session, key: str, default: str | None = None) -> str | None:
@@ -201,6 +202,18 @@ def create_consumer(db: Session, consumer: schemas.ConsumerCreate):
 
 def get_consumer(db: Session, consumer_id: int):
     return db.query(models.Consumer).filter(models.Consumer.consumerID == consumer_id).first()
+
+def get_portal_login(db: Session, consumer_id: int):
+    """The portal account tied to this consumer, if an operator has issued one."""
+    return db.query(models.UserAccount).filter(
+        models.UserAccount.role == models.Role.CONSUMER,
+        models.UserAccount.consumerID == consumer_id,
+    ).first()
+
+def get_portal_logins(db: Session) -> dict:
+    """consumerID -> portal account, for the operator's consumer table."""
+    rows = db.query(models.UserAccount).filter(models.UserAccount.role == models.Role.CONSUMER).all()
+    return {row.consumerID: row for row in rows if row.consumerID}
 
 def update_consumer(db: Session, consumer: models.Consumer, **fields):
     for key, value in fields.items():

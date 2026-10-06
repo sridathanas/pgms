@@ -9,6 +9,7 @@ DASHBOARDS = {
     models.Role.ADMIN: "/admin/",
     models.Role.OPERATOR: "/operator/",
     models.Role.TECHNICIAN: "/technician/",
+    models.Role.CONSUMER: "/portal/",
 }
 
 # Checked against when the username doesn't exist, so unknown and known usernames take the same time

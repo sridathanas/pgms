@@ -5,7 +5,7 @@ from datetime import datetime
 
 class UserAccountBase(BaseModel):
     username: str
-    role: Literal["ADMIN", "OPERATOR", "TECHNICIAN"]
+    role: Literal["ADMIN", "OPERATOR", "TECHNICIAN", "CONSUMER"]
     isActive: bool = True
     approvalStatus: Literal["APPROVED", "PENDING", "REJECTED"] = "APPROVED"
     name: Optional[str] = None
@@ -14,6 +14,7 @@ class UserAccountBase(BaseModel):
     skillLevel: Optional[str] = None
     availabilityStatus: Optional[str] = None
     currentLocation: Optional[str] = None
+    consumerID: Optional[int] = None
 
 class UserAccountCreate(UserAccountBase):
     password: str

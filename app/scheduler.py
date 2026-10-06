@@ -114,13 +114,13 @@ def run_prediction_cycle() -> dict:
             if probability_score >= alert_threshold:
                 already_open = db.query(models.Alert.alertID).filter(
                     models.Alert.subStationID == sub.subStationID,
-                    models.Alert.alertType == "OverloadRisk",
+                    models.Alert.alertType == models.AlertType.OVERLOAD_RISK,
                     models.Alert.status.in_(UNRESOLVED_ALERT_STATUSES),
                 ).first()
                 if already_open is None:
                     db.add(models.Alert(
                         subStationID=sub.subStationID,
-                        alertType="OverloadRisk",
+                        alertType=models.AlertType.OVERLOAD_RISK,
                         severity="HIGH",
                         status=models.AlertStatus.OPEN,
                         description=(f"Predicted failure probability {probability_score:.0%} at "
@@ -155,14 +155,12 @@ def run_theft_detection_cycle() -> dict:
     """
     db: Session = SessionLocal()
     try:
-        consumers = db.query(models.Consumer).all()
+        # A disconnected supply reads zero legitimately, so it is not theft (F12).
+        consumers = db.query(models.Consumer).filter(
+            models.Consumer.connectionStatus == "ACTIVE"
+        ).all()
         alerts_created = 0
-        
-        # Safely fetch dynamic variance threshold or fallback to default
-        try:
-            variance_threshold = crud.get_float_setting(db, "variance_threshold") or VARIANCE_THRESHOLD
-        except Exception:
-            variance_threshold = VARIANCE_THRESHOLD
+        variance_threshold = crud.get_float_setting(db, "variance_threshold")
 
         for consumer in consumers:
             # Fetch usage logs ordered by most recent
@@ -192,7 +190,7 @@ def run_theft_detection_cycle() -> dict:
                 # Check for an unresolved theft alert to prevent dashboard spam
                 already_open = db.query(models.Alert.alertID).filter(
                     models.Alert.consumerID == consumer.consumerID,
-                    models.Alert.alertType == "Theft Suspected",
+                    models.Alert.alertType == models.AlertType.THEFT_SUSPECTED,
                     models.Alert.status.in_(UNRESOLVED_ALERT_STATUSES),
                 ).first()
 
@@ -200,7 +198,7 @@ def run_theft_detection_cycle() -> dict:
                     db.add(models.Alert(
                         consumerID=consumer.consumerID,
                         subStationID=consumer.subStationID,
-                        alertType="Theft Suspected",
+                        alertType=models.AlertType.THEFT_SUSPECTED,
                         severity="CRITICAL",
                         status=models.AlertStatus.OPEN,
                         description=(f"Abnormal consumption variance of {variance:.0%} detected "

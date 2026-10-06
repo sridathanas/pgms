@@ -1,99 +1,84 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div class="container mt-5">
-    
-    {% if error %}
-    <div class="alert alert-danger" role="alert">
-        {{ error }}
-    </div>
-    {% endif %}
-
+<div class="space-y-6">
     {% if not consumer %}
-    <!-- Portal Lookup Form -->
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">Consumer Portal Access</h4>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Enter your unique Consumer ID to view your connection status and monthly power consumption.</p>
-                    <form method="POST" action="/portal/">
-                        <div class="mb-3">
-                            <label for="consumerID" class="form-label">Consumer ID</label>
-                            <input type="number" class="form-control" id="consumerID" name="consumerID" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Access Dashboard</button>
-                    </form>
-                </div>
-            </div>
-        </div>
+    <div>
+        <h2 class="text-2xl font-bold text-blue-900 mb-2">Consumer Portal</h2>
+        <p class="text-gray-600">This account is not linked to a connection yet. Please contact your regional
+            operator so they can attach it to your consumer record.</p>
     </div>
-
     {% else %}
-    <!-- Consumer Data Dashboard (Requirement F6) -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <h2>Welcome, {{ consumer.name }}</h2>
-            <p class="text-muted">Service Address: {{ consumer.address }} | Linked Substation ID: {{ consumer.subStationID }}</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h2 class="text-2xl font-bold text-blue-900 mb-1">Welcome, {{ consumer.name }}</h2>
+            <p class="text-gray-600">
+                {{ consumer.address }}
+                {% if consumer.substation %}&middot; supplied by {{ consumer.substation.subStationName }}{% endif %}
+            </p>
+        </div>
+        <span class="px-3 py-1 text-sm font-semibold rounded-full
+            {% if consumer.connectionStatus == 'ACTIVE' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+            {{ consumer.connectionStatus }}
+        </span>
+    </div>
+
+    <!-- Connection status -->
+    <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-sm">
+        <h3 class="text-lg font-semibold text-gray-800">Connection status</h3>
+        {% if consumer.connectionStatus == 'ACTIVE' %}
+        <p class="mt-1 text-sm text-gray-600">Your connection is active and receiving power.</p>
+        {% else %}
+        <p class="mt-1 text-sm text-gray-600">Your connection is currently suspended. Contact support to restore it.</p>
+        {% endif %}
+    </div>
+
+    <!-- Usage summary -->
+    <div class="grid gap-4 sm:grid-cols-3">
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total recorded</p>
+            <p class="mt-1 text-2xl font-bold text-blue-900">{{ "%.1f"|format(total_kwh) }} <span class="text-base font-medium text-gray-500">kWh</span></p>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Daily average</p>
+            <p class="mt-1 text-2xl font-bold text-blue-900">{{ "%.1f"|format(average_kwh) }} <span class="text-base font-medium text-gray-500">kWh</span></p>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Highest day</p>
+            <p class="mt-1 text-2xl font-bold text-blue-900">
+                {% if peak_log %}{{ "%.1f"|format(peak_log.consumptionKWH) }} <span class="text-base font-medium text-gray-500">kWh</span>{% else %}&mdash;{% endif %}
+            </p>
+            {% if peak_log %}
+            <p class="text-xs text-gray-500">{{ peak_log.timeStamp.strftime('%d %b %Y') }}</p>
+            {% endif %}
         </div>
     </div>
 
-    <div class="row">
-        <!-- Connection Status Card -->
-        <div class="col-md-4 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-muted">Current Connection Status</h5>
-                    {% if consumer.connectionStatus == 'ACTIVE' %}
-                        <h2 class="text-success mt-3"><i class="bi bi-plug-fill"></i> ACTIVE</h2>
-                        <p class="mt-2">Your grid connection is stable and receiving power.</p>
+    <!-- Usage history -->
+    <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+        <h3 class="text-lg font-semibold mb-4 text-gray-800">Recent consumption</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Consumption (kWh)</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for log in usage_logs %}
+                    <tr>
+                        <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{{ log.timeStamp.strftime('%d %b %Y') }}</td>
+                        <td class="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ "%.2f"|format(log.consumptionKWH) }}</td>
+                    </tr>
                     {% else %}
-                        <h2 class="text-danger mt-3"><i class="bi bi-x-circle-fill"></i> DISCONNECTED</h2>
-                        <p class="mt-2">Your connection has been suspended. Please contact support.</p>
-                    {% endif %}
-                </div>
-            </div>
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-sm text-gray-500">No usage has been recorded for this connection yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-
-        <!-- 30-Day Usage History Table -->
-        <div class="col-md-8 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-dark text-white">
-                    <h5 class="mb-0">Recent Consumption History (kWh)</h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Date & Time</th>
-                                    <th>Consumption (kWh)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for log in usage_logs %}
-                                <tr>
-                                    <td>{{ log.timeStamp.strftime('%Y-%m-%d %H:%M') }}</td>
-                                    <td><strong>{{ "%.2f"|format(log.consumptionKWH) }}</strong></td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="2" class="text-center text-muted py-4">No usage history found for this connection.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="text-start mt-3">
-        <a href="/portal/" class="btn btn-outline-secondary">← Back to Portal Login</a>
     </div>
     {% endif %}
-
 </div>
 {% endblock %}

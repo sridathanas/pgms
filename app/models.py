@@ -8,6 +8,13 @@ class Role:
     ADMIN = "ADMIN"
     OPERATOR = "OPERATOR"
     TECHNICIAN = "TECHNICIAN"
+    CONSUMER = "CONSUMER"  # portal login issued by an operator, tied to one consumer record
+
+class AlertType:
+    """One spelling per alert type, so styling and de-duplication always match."""
+    OVERLOAD_RISK = "OverloadRisk"
+    THEFT_SUSPECTED = "Theft Suspected"
+    WEATHER_RISK = "WeatherRisk"
 
 class ApprovalStatus:
     APPROVED = "APPROVED"
@@ -56,7 +63,11 @@ class UserAccount(Base):
     availabilityStatus = Column(String, nullable=True)
     currentLocation = Column(String, nullable=True)
 
-    logs = relationship("SystemLog", back_populates="user")
+    # Consumer-only: the record this portal login may read. NULL for staff accounts.
+    consumerID = Column(Integer, ForeignKey("consumers.consumerID"), nullable=True)
+
+    logs = relationship("SystemLog", back_populates="user", foreign_keys="SystemLog.userID")
+    consumer = relationship("Consumer", back_populates="portal_logins")
 
 class SystemLog(Base):
     __tablename__ = "system_logs"
@@ -105,6 +116,7 @@ class Consumer(Base):
 
     substation = relationship("Substation", back_populates="consumers")
     usage_logs = relationship("UsageLog", back_populates="consumer")
+    portal_logins = relationship("UserAccount", back_populates="consumer")
 
 class UsageLog(Base):
     __tablename__ = "usage_logs"

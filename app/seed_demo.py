@@ -84,6 +84,9 @@ GRID_TABLES = [models.MaintenanceTicket, models.Alert, models.OutagePrediction,
 
 
 def reset_grid_data(db):
+    # Portal logins point at consumer rows, so they go first
+    db.query(models.UserAccount).filter(models.UserAccount.role == models.Role.CONSUMER).delete(
+        synchronize_session=False)
     for model in GRID_TABLES:
         db.query(model).delete()
     db.query(models.SystemLog).filter(
@@ -143,6 +146,19 @@ def create_consumers_and_usage(db, substations):
     return consumers
 
 
+def create_portal_login(db, consumer):
+    """A consumer account for the portal, the way an operator would issue one."""
+    username = consumer.name.lower().replace(" ", ".").replace("'", "")
+    if crud.get_user_by_username(db, username):
+        print(f"skipped  {username} (already exists)")
+        return
+    crud.create_user(db, schemas.UserAccountCreate(
+        username=username, password="Consumer@123", role=models.Role.CONSUMER,
+        name=consumer.name, phone=consumer.contactNo, consumerID=consumer.consumerID,
+    ))
+    print(f"created  {username:<14} role={models.Role.CONSUMER:<11} password=Consumer@123")
+
+
 def create_telemetry_history(db, substations):
     """Hourly sensor, weather and prediction rows so the dashboard has history on first load."""
     now = datetime.utcnow()
@@ -189,23 +205,23 @@ def create_alerts_and_tickets(db, substations, consumers):
     operator_id = operator.userID if operator else None
 
     overload_open = models.Alert(
-        subStationID=substations[0].subStationID, alertType="OverloadRisk", severity="HIGH",
+        subStationID=substations[0].subStationID, alertType=models.AlertType.OVERLOAD_RISK, severity="HIGH",
         status=models.AlertStatus.OPEN, timeStamp=now - timedelta(minutes=12),
         description="Predicted failure probability 86% at Kottayam Main 220kV: load near capacity in hot weather.")
     overload_verified = models.Alert(
-        subStationID=substations[1].subStationID, alertType="OverloadRisk", severity="MEDIUM",
+        subStationID=substations[1].subStationID, alertType=models.AlertType.OVERLOAD_RISK, severity="MEDIUM",
         status=models.AlertStatus.IN_PROGRESS, timeStamp=now - timedelta(hours=5),
         description="Transformer cooling suspected at Pala 110kV; technician dispatched.")
     theft_alert = models.Alert(
-        consumerID=consumers[4].consumerID, alertType="TheftSuspected", severity="HIGH",
+        consumerID=consumers[4].consumerID, alertType=models.AlertType.THEFT_SUSPECTED, severity="HIGH",
         status=models.AlertStatus.OPEN, timeStamp=now - timedelta(hours=2),
         description="Consumption dropped to near zero for 7 days while the connection stayed active.")
     weather_alert = models.Alert(
-        subStationID=substations[4].subStationID, alertType="WeatherRisk", severity="LOW",
+        subStationID=substations[4].subStationID, alertType=models.AlertType.WEATHER_RISK, severity="LOW",
         status=models.AlertStatus.DISMISSED, timeStamp=now - timedelta(days=1),
         description="High winds forecast near Vaikom 66kV. Reviewed and dismissed.")
     feeder_alert = models.Alert(
-        subStationID=substations[2].subStationID, alertType="OverloadRisk", severity="MEDIUM",
+        subStationID=substations[2].subStationID, alertType=models.AlertType.OVERLOAD_RISK, severity="MEDIUM",
         status=models.AlertStatus.IN_PROGRESS, timeStamp=now - timedelta(hours=8),
         description="Repeated load spikes on the Ettumanoor feeder.")
     db.add_all([overload_open, overload_verified, theft_alert, weather_alert, feeder_alert])
@@ -282,6 +298,7 @@ def main():
         create_users(db)
         stations, substations = create_infrastructure(db)
         consumers = create_consumers_and_usage(db, substations)
+        create_portal_login(db, consumers[0])
         create_telemetry_history(db, substations)
         create_alerts_and_tickets(db, substations, consumers)
 

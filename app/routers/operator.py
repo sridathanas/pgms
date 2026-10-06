@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from app import auth, database, crud, schemas, models, scheduler
+from app.routers import auth as auth_router
 
 router = APIRouter(
     prefix="/operator",
@@ -55,6 +56,7 @@ def operator_dashboard(
             "title": "Operator Dashboard",
             "substations": crud.get_substations(db),
             "consumers": crud.get_consumers(db),
+            "portal_logins": crud.get_portal_logins(db),
             "alerts": alerts,
             "technicians": crud.get_technicians(db),
             "available_technicians": crud.get_technicians(db, only_available=True),
@@ -114,6 +116,45 @@ def update_connection_status(
     crud.log_action(db, "CONSUMER_STATUS_CHANGED",
                     f"{user.username} set {consumer.name} to {connectionStatus}", user.userID)
     return back_to_console(request, f"{consumer.name} is now {connectionStatus}.")
+
+
+@router.post("/consumer/{consumer_id}/portal-access")
+def create_portal_login(
+    consumer_id: int,
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    """Issue a portal login for one consumer, so they can see their own usage and nobody else's."""
+    consumer = crud.get_consumer(db, consumer_id)
+    if consumer is None:
+        return back_to_console(request, "That consumer no longer exists.")
+    if crud.get_portal_login(db, consumer_id) is not None:
+        return back_to_console(request, f"{consumer.name} already has portal access.")
+
+    username = username.strip().lower()
+    if not auth_router.USERNAME_PATTERN.fullmatch(username):
+        return back_to_console(request, "Username must be 3-30 characters: letters, numbers, dots, "
+                                        "underscores or hyphens.")
+    if crud.get_user_by_username(db, username):
+        return back_to_console(request, "That username is already taken.")
+    if auth_router.weak_password(password):
+        return back_to_console(request, "The portal password needs at least 8 characters, with a letter "
+                                        "and a number.")
+
+    crud.create_user(db, schemas.UserAccountCreate(
+        username=username,
+        password=password,
+        role=models.Role.CONSUMER,
+        name=consumer.name,
+        phone=consumer.contactNo,
+        consumerID=consumer.consumerID,
+    ))
+    crud.log_action(db, "PORTAL_ACCESS_CREATED",
+                    f"{user.username} issued portal login '{username}' for consumer {consumer_id}", user.userID)
+    return back_to_console(request, f"Portal access created for {consumer.name} (username {username}).")
 
 
 @router.post("/ticket")

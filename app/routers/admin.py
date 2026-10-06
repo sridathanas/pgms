@@ -309,6 +309,7 @@ def settings_page(
             "title": "System Settings",
             "alert_threshold": crud.get_float_setting(db, "alert_threshold"),
             "medium_threshold": crud.get_float_setting(db, "medium_risk_threshold"),
+            "variance_threshold": crud.get_float_setting(db, "variance_threshold"),
             "interval_label": scheduler.interval_label(),
             "flash": request.session.pop("flash", None),
         }
@@ -319,10 +320,11 @@ def save_settings(
     request: Request,
     alert_threshold: float = Form(...),
     medium_risk_threshold: float = Form(...),
+    variance_threshold: float = Form(...),
     user: models.UserAccount = Depends(auth.require_login),
     db: Session = Depends(database.get_db)
 ):
-    if not 0.0 < alert_threshold <= 1.0 or not 0.0 < medium_risk_threshold <= 1.0:
+    if not all(0.0 < value <= 1.0 for value in (alert_threshold, medium_risk_threshold, variance_threshold)):
         return back_to_admin(request, "Thresholds must be between 0 and 1.", "/admin/settings")
     if medium_risk_threshold >= alert_threshold:
         return back_to_admin(request, "The medium threshold must be lower than the alert threshold.",
@@ -330,9 +332,11 @@ def save_settings(
 
     crud.set_setting(db, "alert_threshold", f"{alert_threshold}", user.userID)
     crud.set_setting(db, "medium_risk_threshold", f"{medium_risk_threshold}", user.userID)
+    crud.set_setting(db, "variance_threshold", f"{variance_threshold}", user.userID)
     crud.log_action(db, "AI_THRESHOLDS_UPDATED",
-                    f"{user.username} set the alert threshold to {alert_threshold:.2f} "
-                    f"and the medium threshold to {medium_risk_threshold:.2f}", user.userID)
+                    f"{user.username} set the alert threshold to {alert_threshold:.2f}, the medium "
+                    f"threshold to {medium_risk_threshold:.2f} and the theft variance threshold to "
+                    f"{variance_threshold:.2f}", user.userID)
     return back_to_admin(request, "AI thresholds updated. The next prediction cycle uses them.",
                          "/admin/settings")
 

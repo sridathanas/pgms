@@ -21,6 +21,7 @@ NEW_COLUMNS = {
         "skillLevel": "VARCHAR",
         "availabilityStatus": "VARCHAR",
         "currentLocation": "VARCHAR",
+        "consumerID": "INTEGER",
     },
     "alerts": {
         "description": "VARCHAR",
