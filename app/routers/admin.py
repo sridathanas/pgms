@@ -3,6 +3,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from app import auth, database, crud, schemas, models, scheduler
+import csv
+import io
+from datetime import datetime
+from fastapi.responses import RedirectResponse, StreamingResponse
+
 
 router = APIRouter(
     prefix="/admin",
@@ -210,6 +215,64 @@ def update_substation(
     crud.log_action(db, "SUBSTATION_UPDATED",
                     f"{user.username} updated substation #{substation_id} ({stationStatus})", user.userID)
     return back_to_admin(request, f"Updated '{substation.subStationName}'.")
+
+@router.get("/report.csv")
+def export_grid_health_report(
+    user: models.UserAccount = Depends(auth.require_login),
+    db: Session = Depends(database.get_db)
+):
+    report = crud.build_grid_health_report(db)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    writer.writerow(["Grid Health Report"])
+    writer.writerow(["Generated (UTC)", report["generated_at"].strftime("%Y-%m-%d %H:%M:%S")])
+    writer.writerow([])
+
+    writer.writerow(["Summary", "Value"])
+    writer.writerow(["Power stations", report["power_station_count"]])
+    writer.writerow(["Substations", report["substation_count"]])
+    writer.writerow(["Consumers", report["consumer_count"]])
+    writer.writerow(["Total load (MW)", f"{report['total_load_mw']:.1f}"])
+    writer.writerow(["Total capacity (MW)", f"{report['total_capacity_mw']:.1f}"])
+    writer.writerow(["Grid utilisation (%)", f"{report['load_percentage']:.1f}"])
+    writer.writerow(["High risk substations", len(report["high_risk"])])
+    writer.writerow(["Active alerts", len(report["active_alerts"])])
+    writer.writerow(["Alerts raised (24h)", len(report["alerts_last_24h"])])
+    writer.writerow(["Tickets open", len(report["tickets_open"])])
+    writer.writerow(["Tickets awaiting review", len(report["tickets_awaiting_review"])])
+    writer.writerow(["Tickets closed (24h)", len(report["tickets_closed_24h"])])
+    writer.writerow([])
+
+    writer.writerow(["Substation", "Station status", "Risk level", "Failure probability (%)",
+                     "Current load (MW)", "Max load (MW)", "Temperature (C)", "Wind (km/h)",
+                     "Humidity (%)", "Last checked (UTC)"])
+    for row in report["risk_rows"]:
+        substation, prediction = row["substation"], row["prediction"]
+        sensor, weather = row["sensor"], row["weather"]
+        writer.writerow([
+            substation.subStationName,
+            substation.stationStatus,
+            prediction.riskLevel if prediction else "NOT SCORED",
+            f"{prediction.failureProbScore * 100:.0f}" if prediction else "",
+            f"{sensor.currentLoadMW:.1f}" if sensor else "",
+            substation.maxLoadCapacityMW,
+            f"{weather.temperature:.0f}" if weather else "",
+            f"{weather.windSpeed:.0f}" if weather else "",
+            f"{weather.humidity:.0f}" if weather else "",
+            prediction.timeStamp.strftime("%Y-%m-%d %H:%M") if prediction else "",
+        ])
+
+    crud.log_action(db, "REPORT_EXPORTED",
+                    f"{user.username} exported the grid health report as CSV", user.userID)
+
+    filename = f"grid-health-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    # The BOM makes Excel open it as UTF-8 instead of mangling accented names
+    return StreamingResponse(
+        iter(["\ufeff" + buffer.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @router.post("/substation/{substation_id}/delete")
 def delete_substation(
